@@ -53,7 +53,7 @@ export async function activateLicenseAction(licenseKey: string, formData: FormDa
       status: whatsappResult.sent ? "whatsapp_ready_sent" : "whatsapp_ready_skipped",
       message: whatsappResult.sent
         ? `Pesan spreadsheet siap dikirim ke ${license.phone}.`
-        : `Pesan spreadsheet siap tidak terkirim: ${whatsappResult.reason || "cek konfigurasi Fonnte"}.`
+        : `Pesan spreadsheet siap tidak terkirim: ${whatsappResult.reason || "cek konfigurasi Fonnte"}.${whatsappResult.response ? ` Response: ${JSON.stringify(whatsappResult.response)}` : ""}`
     });
   }
 

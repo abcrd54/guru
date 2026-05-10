@@ -1,11 +1,18 @@
 import { ConfigAlert } from "@/components/config-alert";
 import { getAppSettings } from "@/lib/firestore-data";
-import { saveWhatsappSettingsAction } from "./actions";
+import { saveWhatsappSettingsAction, sendWhatsappTestAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function WhatsappPage() {
+export default async function WhatsappPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ status?: string; message?: string }>;
+}) {
   const data = await getAppSettings();
+  const params = searchParams ? await searchParams : undefined;
+  const status = params?.status || "";
+  const message = params?.message || "";
 
   return (
     <>
@@ -18,6 +25,13 @@ export default async function WhatsappPage() {
       </section>
 
       {!data.configured ? <ConfigAlert /> : null}
+
+      {message ? (
+        <section className="card">
+          <h2 className="card-title">{status === "ok" ? "Tes WhatsApp Berhasil" : "Tes WhatsApp Gagal"}</h2>
+          <p className="card-copy">{message}</p>
+        </section>
+      ) : null}
 
       <section className="card">
         <h2 className="card-title">Provider dan Template Pesan</h2>
@@ -44,6 +58,28 @@ export default async function WhatsappPage() {
           <div>
             <button type="submit" className="button primary">
               Simpan Konfigurasi WhatsApp
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="card">
+        <h2 className="card-title">Tes Kirim WhatsApp</h2>
+        <p className="card-copy">
+          Gunakan form ini untuk memastikan konfigurasi Fonnte benar sebelum membuat lisensi guru.
+        </p>
+        <form action={sendWhatsappTestAction} className="grid-2">
+          <label className="field">
+            <span>Nomor WhatsApp Test</span>
+            <input name="testPhone" placeholder="08xxxxxxxxxx atau 628xxxxxxxxxx" />
+          </label>
+          <label className="field">
+            <span>Pesan Test</span>
+            <input name="testMessage" defaultValue="Tes koneksi WhatsApp dari SiapGuru Owner." />
+          </label>
+          <div>
+            <button type="submit" className="button primary">
+              Kirim Pesan Test
             </button>
           </div>
         </form>

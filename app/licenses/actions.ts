@@ -35,7 +35,7 @@ export async function createLicenseAction(formData: FormData) {
       status: whatsappResult.sent ? "whatsapp_sent" : "whatsapp_skipped",
       message: whatsappResult.sent
         ? `Pesan aktivasi dikirim ke ${phone}.`
-        : `Pesan aktivasi tidak terkirim: ${whatsappResult.reason || "cek konfigurasi Fonnte"}.`
+        : `Pesan aktivasi tidak terkirim: ${whatsappResult.reason || "cek konfigurasi Fonnte"}.${whatsappResult.response ? ` Response: ${JSON.stringify(whatsappResult.response)}` : ""}`
     });
   }
 

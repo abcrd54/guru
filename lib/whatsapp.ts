@@ -16,6 +16,11 @@ type SendSpreadsheetReadyMessageInput = {
   spreadsheetUrl: string;
 };
 
+type SendWhatsappPayload = {
+  phone: string;
+  message: string;
+};
+
 function normalizePhone(phone: string) {
   return phone.replace(/[^\d]/g, "");
 }
@@ -56,11 +61,7 @@ function extractProviderReason(parsed: unknown) {
   return String(record.reason || record.message || record.detail || record.msg || "");
 }
 
-function applyTemplate(template: string, variables: Record<string, string>) {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => variables[key] || "");
-}
-
-export async function sendActivationWhatsapp(input: SendActivationMessageInput) {
+async function sendWhatsappPayload(input: SendWhatsappPayload) {
   const appSettings = await getAppSettings();
   const settings = appSettings.settings;
   const { target, countryCode } = resolveFonnteTarget(input.phone);
@@ -68,7 +69,77 @@ export async function sendActivationWhatsapp(input: SendActivationMessageInput) 
   if (!settings.whatsappProviderUrl || !settings.whatsappProviderToken) {
     return {
       sent: false,
+      reason: "Konfigurasi Fonnte belum lengkap.",
+      response: null
+    };
+  }
+
+  if (!target) {
+    return {
+      sent: false,
+      reason: "Nomor WhatsApp kosong atau tidak valid.",
+      response: null
+    };
+  }
+
+  const payload = new URLSearchParams();
+  payload.set("target", target);
+  payload.set("message", input.message);
+  payload.set("countryCode", countryCode);
+
+  const response = await fetch(settings.whatsappProviderUrl, {
+    method: "POST",
+    headers: {
+      Authorization: settings.whatsappProviderToken,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: payload.toString(),
+    cache: "no-store"
+  });
+
+  const raw = await response.text();
+  let parsed: unknown = raw;
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = raw;
+  }
+
+  if (!response.ok) {
+    return {
+      sent: false,
+      reason: `HTTP ${response.status}${extractProviderReason(parsed) ? ` - ${extractProviderReason(parsed)}` : ""}`,
+      response: parsed
+    };
+  }
+
+  const success =
+    typeof parsed === "object" &&
+    parsed !== null &&
+    ("status" in parsed ? Boolean((parsed as { status?: boolean }).status) : "Status" in parsed ? Boolean((parsed as { Status?: boolean }).Status) : true);
+
+  return {
+    sent: success,
+    reason: success ? "" : extractProviderReason(parsed),
+    response: parsed
+  };
+}
+
+function applyTemplate(template: string, variables: Record<string, string>) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => variables[key] || "");
+}
+
+export async function sendActivationWhatsapp(input: SendActivationMessageInput) {
+  const appSettings = await getAppSettings();
+  const settings = appSettings.settings;
+
+  if (!settings.whatsappProviderUrl || !settings.whatsappProviderToken) {
+    return {
+      sent: false,
       reason: "Konfigurasi Fonnte belum lengkap."
+      ,
+      response: null
     };
   }
 
@@ -76,13 +147,8 @@ export async function sendActivationWhatsapp(input: SendActivationMessageInput) 
     return {
       sent: false,
       reason: "Activation base URL belum diatur."
-    };
-  }
-
-  if (!target) {
-    return {
-      sent: false,
-      reason: "Nomor WhatsApp guru kosong atau tidak valid."
+      ,
+      response: null
     };
   }
 
@@ -97,47 +163,12 @@ export async function sendActivationWhatsapp(input: SendActivationMessageInput) 
     licenseKey: input.licenseKey,
     activationUrl
   });
-
-  const formData = new FormData();
-  formData.append("target", target);
-  formData.append("message", message);
-  formData.append("countryCode", countryCode);
-
-  const response = await fetch(settings.whatsappProviderUrl, {
-    method: "POST",
-    headers: {
-      Authorization: settings.whatsappProviderToken
-    },
-    body: formData,
-    cache: "no-store"
+  const result = await sendWhatsappPayload({
+    phone: input.phone,
+    message
   });
-
-  const raw = await response.text();
-  let parsed: unknown = raw;
-
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    parsed = raw;
-  }
-
-  if (!response.ok) {
-    return {
-      sent: false,
-      reason: `HTTP ${response.status}${extractProviderReason(parsed) ? ` - ${extractProviderReason(parsed)}` : ""}`,
-      response: parsed
-    };
-  }
-
-  const success =
-    typeof parsed === "object" &&
-    parsed !== null &&
-    ("status" in parsed ? Boolean((parsed as { status?: boolean }).status) : "Status" in parsed ? Boolean((parsed as { Status?: boolean }).Status) : true);
-
   return {
-    sent: success,
-    reason: success ? "" : extractProviderReason(parsed),
-    response: parsed,
+    ...result,
     activationUrl
   };
 }
@@ -145,26 +176,20 @@ export async function sendActivationWhatsapp(input: SendActivationMessageInput) 
 export async function sendSpreadsheetReadyWhatsapp(input: SendSpreadsheetReadyMessageInput) {
   const appSettings = await getAppSettings();
   const settings = appSettings.settings;
-  const { target, countryCode } = resolveFonnteTarget(input.phone);
 
   if (!settings.whatsappProviderUrl || !settings.whatsappProviderToken) {
     return {
       sent: false,
-      reason: "Konfigurasi Fonnte belum lengkap."
-    };
-  }
-
-  if (!target) {
-    return {
-      sent: false,
-      reason: "Nomor WhatsApp guru kosong atau tidak valid."
+      reason: "Konfigurasi Fonnte belum lengkap.",
+      response: null
     };
   }
 
   if (!input.spreadsheetUrl) {
     return {
       sent: false,
-      reason: "URL spreadsheet belum tersedia."
+      reason: "URL spreadsheet belum tersedia.",
+      response: null
     };
   }
 
@@ -178,47 +203,16 @@ export async function sendSpreadsheetReadyWhatsapp(input: SendSpreadsheetReadyMe
     licenseKey: input.licenseKey,
     spreadsheetUrl: input.spreadsheetUrl
   });
-
-  const formData = new FormData();
-  formData.append("target", target);
-  formData.append("message", message);
-  formData.append("countryCode", countryCode);
-
-  const response = await fetch(settings.whatsappProviderUrl, {
-    method: "POST",
-    headers: {
-      Authorization: settings.whatsappProviderToken
-    },
-    body: formData,
-    cache: "no-store"
+  const result = await sendWhatsappPayload({
+    phone: input.phone,
+    message
   });
-
-  const raw = await response.text();
-  let parsed: unknown = raw;
-
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    parsed = raw;
-  }
-
-  if (!response.ok) {
-    return {
-      sent: false,
-      reason: `HTTP ${response.status}${extractProviderReason(parsed) ? ` - ${extractProviderReason(parsed)}` : ""}`,
-      response: parsed
-    };
-  }
-
-  const success =
-    typeof parsed === "object" &&
-    parsed !== null &&
-    ("status" in parsed ? Boolean((parsed as { status?: boolean }).status) : "Status" in parsed ? Boolean((parsed as { Status?: boolean }).Status) : true);
-
   return {
-    sent: success,
-    reason: success ? "" : extractProviderReason(parsed),
-    response: parsed,
+    ...result,
     spreadsheetUrl: input.spreadsheetUrl
   };
+}
+
+export async function sendTestWhatsapp(input: { phone: string; message: string }) {
+  return sendWhatsappPayload(input);
 }
