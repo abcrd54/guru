@@ -164,3 +164,38 @@ export async function sendActivationWhatsapp(input: SendActivationMessageInput) 
 export async function sendTestWhatsapp(input: { phone: string; message: string }) {
   return sendWhatsappPayload(input)
 }
+
+export async function sendSpreadsheetReadyMessage(input: {
+  licenseKey: string
+  teacherName: string
+  schoolName: string
+  phone: string
+  spreadsheetUrl: string
+}) {
+  const appSettings = await getAppSettings()
+  const settings = appSettings.settings
+
+  if (!settings.whatsappProviderUrl || !settings.whatsappProviderToken) {
+    return {
+      sent: false,
+      reason: 'Konfigurasi Fonnte belum lengkap.',
+      response: null
+    }
+  }
+
+  const template =
+    settings.whatsappTemplateReady ||
+    'Halo {{teacherName}}! ✅\n\nSpreadsheet Anda sudah siap digunakan!\n\nSekolah: {{schoolName}}\nLicense: {{licenseKey}}\n\nKlik link di bawah untuk membuka:\n{{spreadsheetUrl}}\n\nSpreadsheet sudah di-share ke email Anda.\n\nSalam,\nTim SiapGuru'
+
+  const message = applyTemplate(template, {
+    teacherName: input.teacherName,
+    schoolName: input.schoolName,
+    licenseKey: input.licenseKey,
+    spreadsheetUrl: input.spreadsheetUrl
+  })
+  
+  return sendWhatsappPayload({
+    phone: input.phone,
+    message
+  })
+}

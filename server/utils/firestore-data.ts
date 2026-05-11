@@ -333,6 +333,37 @@ export async function activateLicense(params: {
         status: 'spreadsheet_created',
         message: 'Spreadsheet berhasil dibuat dan di-share'
       })
+      
+      // Send WhatsApp notification if phone number provided
+      if (params.phone) {
+        try {
+          const { sendSpreadsheetReadyMessage } = await import('./whatsapp')
+          
+          await sendSpreadsheetReadyMessage({
+            licenseKey: params.licenseKey,
+            teacherName: params.teacherName,
+            schoolName: params.schoolName,
+            phone: params.phone,
+            spreadsheetUrl
+          })
+          
+          await addProvisioningLog({
+            licenseKey: params.licenseKey,
+            teacherName: params.teacherName,
+            status: 'whatsapp_sent',
+            message: 'Notifikasi WhatsApp berhasil dikirim'
+          })
+        } catch (waError: any) {
+          console.error('Error sending WhatsApp:', waError)
+          
+          await addProvisioningLog({
+            licenseKey: params.licenseKey,
+            teacherName: params.teacherName,
+            status: 'whatsapp_error',
+            message: `Gagal mengirim WhatsApp: ${waError.message}`
+          })
+        }
+      }
     }
   } catch (error: any) {
     console.error('Error creating spreadsheet:', error)
