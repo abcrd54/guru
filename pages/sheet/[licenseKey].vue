@@ -151,7 +151,7 @@ async function loadData() {
   error.value = ''
   
   try {
-    const response = await $fetch(`/api/sheet/${licenseKey}`)
+    const response = await $fetch(`/api/sheet/${licenseKey}`) as any
     
     if (response.success && response.teacher) {
       teacher.value = response.teacher

@@ -204,7 +204,7 @@ const form = ref({
 // Load license data
 onMounted(async () => {
   try {
-    const response = await $fetch(`/api/activate/${licenseKey}`)
+    const response = await $fetch(`/api/activate/${licenseKey}`) as any
     
     if (response.success && response.license) {
       license.value = response.license
@@ -248,7 +248,7 @@ async function handleActivate() {
         email: form.value.email,
         phone: form.value.phone
       }
-    })
+    }) as any
     
     if (response.success) {
       success.value = true
