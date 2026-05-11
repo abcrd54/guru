@@ -153,22 +153,11 @@ export async function createSpreadsheetFromTemplate(params: {
       }
     }
     
-    // Share with teacher email as owner (transfer ownership)
+    // Share with teacher email as owner (transfer ownership immediately)
     console.log('🔵 [Google Sheets] Transferring ownership to teacher...')
     try {
-      // First, add teacher as writer
-      await drive.permissions.create({
-        fileId: newSpreadsheetId,
-        requestBody: {
-          type: 'user',
-          role: 'writer',
-          emailAddress: params.email
-        },
-        sendNotificationEmail: false
-      })
-      console.log('✅ [Google Sheets] Teacher added as writer')
-      
-      // Then transfer ownership
+      // Directly create owner permission with transferOwnership flag
+      // This transfers ownership immediately and downgrades Service Account to writer
       await drive.permissions.create({
         fileId: newSpreadsheetId,
         requestBody: {
@@ -180,23 +169,45 @@ export async function createSpreadsheetFromTemplate(params: {
         sendNotificationEmail: true,
         emailMessage: `Spreadsheet SiapGuru Anda sudah siap! Silakan akses untuk mengelola nilai siswa.`
       })
-      console.log('✅ [Google Sheets] Ownership transferred to teacher')
-    } catch (permError: any) {
-      console.warn('⚠️ [Google Sheets] Could not transfer ownership, keeping as shared file')
-      console.warn('⚠️ [Google Sheets] Permission error:', permError.message)
+      console.log('✅ [Google Sheets] Ownership transferred to teacher successfully')
       
-      // Fallback: just share with write access
-      await drive.permissions.create({
-        fileId: newSpreadsheetId,
-        requestBody: {
-          type: 'user',
-          role: 'writer',
-          emailAddress: params.email
-        },
-        sendNotificationEmail: true,
-        emailMessage: `Spreadsheet SiapGuru Anda sudah siap! Silakan akses untuk mengelola nilai siswa.`
-      })
-      console.log('✅ [Google Sheets] Spreadsheet shared with write access')
+      // Set file restrictions to prevent copying by others
+      console.log('🔵 [Google Sheets] Setting copy restrictions...')
+      try {
+        await drive.files.update({
+          fileId: newSpreadsheetId,
+          requestBody: {
+            copyRequiresWriterPermission: true, // Prevent viewers/commenters from copying
+            writersCanShare: false // Only owner can share
+          }
+        })
+        console.log('✅ [Google Sheets] Copy restrictions applied')
+      } catch (restrictError: any) {
+        console.warn('⚠️ [Google Sheets] Could not set restrictions:', restrictError.message)
+        // Continue even if restrictions fail
+      }
+      
+    } catch (permError: any) {
+      console.error('❌ [Google Sheets] Failed to transfer ownership:', permError.message)
+      console.warn('⚠️ [Google Sheets] Attempting fallback: share with write access')
+      
+      // Fallback: just share with write access if transfer fails
+      try {
+        await drive.permissions.create({
+          fileId: newSpreadsheetId,
+          requestBody: {
+            type: 'user',
+            role: 'writer',
+            emailAddress: params.email
+          },
+          sendNotificationEmail: true,
+          emailMessage: `Spreadsheet SiapGuru Anda sudah siap! Silakan akses untuk mengelola nilai siswa.`
+        })
+        console.log('✅ [Google Sheets] Spreadsheet shared with write access')
+      } catch (fallbackError: any) {
+        console.error('❌ [Google Sheets] Fallback also failed:', fallbackError.message)
+        throw new Error(`Gagal membagikan spreadsheet: ${fallbackError.message}`)
+      }
     }
 
     const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${newSpreadsheetId}`
@@ -230,6 +241,11 @@ export async function createSpreadsheetFromTemplate(params: {
     if (error.message && error.message.includes('storage quota')) {
       console.log('⚠️ [Google Sheets] Storage quota error detected, will try alternative method on retry')
       throw new Error('Storage quota Service Account terdeteksi penuh. Sistem akan mencoba metode alternatif. Silakan coba lagi.')
+    }
+    
+    // Check if it's a permission error
+    if (error.message && error.message.includes('does not have permission')) {
+      throw new Error(`Service Account tidak memiliki akses ke template spreadsheet. Silakan share template (${params.templateId}) dengan email: ${process.env.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL} dan berikan akses minimal "Viewer".`)
     }
     
     throw new Error(`Gagal membuat spreadsheet: ${error.message}`)
