@@ -298,11 +298,15 @@ export async function activateLicense(params: {
   let spreadsheetId = ''
   
   try {
+    console.log('🔵 [Activation] Checking Google credentials...')
     const { hasGoogleCredentials, createSpreadsheetFromTemplate } = await import('./google-sheets')
     
     if (hasGoogleCredentials()) {
+      console.log('✅ [Activation] Google credentials found')
       const templateId = process.env.GOOGLE_TEMPLATE_SPREADSHEET_ID!
+      console.log('🔵 [Activation] Template ID from env:', templateId)
       
+      console.log('🔵 [Activation] Calling createSpreadsheetFromTemplate...')
       const result = await createSpreadsheetFromTemplate({
         templateId,
         teacherName: params.teacherName,
@@ -313,18 +317,24 @@ export async function activateLicense(params: {
       spreadsheetUrl = result.spreadsheetUrl
       spreadsheetId = result.spreadsheetId
       
+      console.log('✅ [Activation] Spreadsheet created:', spreadsheetUrl)
+      
       // Update teacher record with spreadsheet info
+      console.log('🔵 [Activation] Updating teacher record...')
       await teacherRef.update({
         spreadsheetId,
         spreadsheetUrl,
         updatedAt: FieldValue.serverTimestamp()
       })
+      console.log('✅ [Activation] Teacher record updated')
       
       // Update license record with spreadsheet URL
+      console.log('🔵 [Activation] Updating license record...')
       await licenseRef.update({
         spreadsheetUrl,
         updatedAt: FieldValue.serverTimestamp()
       })
+      console.log('✅ [Activation] License record updated')
       
       // Log success
       await addProvisioningLog({
@@ -337,6 +347,7 @@ export async function activateLicense(params: {
       // Send WhatsApp notification if phone number provided
       if (params.phone) {
         try {
+          console.log('🔵 [Activation] Sending WhatsApp notification...')
           const { sendSpreadsheetReadyMessage } = await import('./whatsapp')
           
           await sendSpreadsheetReadyMessage({
@@ -347,6 +358,8 @@ export async function activateLicense(params: {
             spreadsheetUrl
           })
           
+          console.log('✅ [Activation] WhatsApp notification sent')
+          
           await addProvisioningLog({
             licenseKey: params.licenseKey,
             teacherName: params.teacherName,
@@ -354,7 +367,8 @@ export async function activateLicense(params: {
             message: 'Notifikasi WhatsApp berhasil dikirim'
           })
         } catch (waError: any) {
-          console.error('Error sending WhatsApp:', waError)
+          console.error('❌ [Activation] Error sending WhatsApp:', waError)
+          console.error('❌ [Activation] WhatsApp error message:', waError.message)
           
           await addProvisioningLog({
             licenseKey: params.licenseKey,
@@ -364,9 +378,13 @@ export async function activateLicense(params: {
           })
         }
       }
+    } else {
+      console.log('⚠️ [Activation] Google credentials not found')
     }
   } catch (error: any) {
-    console.error('Error creating spreadsheet:', error)
+    console.error('❌ [Activation] Error creating spreadsheet:', error)
+    console.error('❌ [Activation] Error message:', error.message)
+    console.error('❌ [Activation] Error stack:', error.stack)
     
     // Log error but don't fail activation
     await addProvisioningLog({
