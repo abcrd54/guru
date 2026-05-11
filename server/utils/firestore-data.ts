@@ -303,3 +303,59 @@ export async function activateLicense(params: {
   }
 }
 
+export async function getTeacherByLicenseKey(licenseKey: string) {
+  if (!hasFirebaseAdminEnv()) {
+    throw new Error('Firebase Admin environment variables belum lengkap.')
+  }
+
+  const db = getAdminDb()
+  
+  // First, check if license exists
+  const licenseDoc = await db.collection('licenses').doc(licenseKey).get()
+  
+  if (!licenseDoc.exists) {
+    return null
+  }
+
+  const licenseData = licenseDoc.data()!
+  
+  // If license not activated yet, return null
+  if (licenseData.isActive !== false) {
+    return null
+  }
+
+  // Find teacher by license key
+  const teachersSnap = await db.collection('teachers')
+    .where('licenseKey', '==', licenseKey)
+    .limit(1)
+    .get()
+
+  if (teachersSnap.empty) {
+    // Return license data if teacher not found yet
+    return {
+      licenseKey,
+      teacherName: String(licenseData.teacherName || ''),
+      schoolName: String(licenseData.schoolName || ''),
+      email: String(licenseData.userEmail || ''),
+      phone: String(licenseData.phone || ''),
+      spreadsheetUrl: String(licenseData.spreadsheetUrl || ''),
+      spreadsheetId: ''
+    }
+  }
+
+  const teacherDoc = teachersSnap.docs[0]
+  const teacherData = teacherDoc.data()
+
+  return {
+    id: teacherDoc.id,
+    licenseKey,
+    teacherName: String(teacherData.teacherName || teacherData.name || ''),
+    schoolName: String(teacherData.schoolName || ''),
+    email: String(teacherData.email || ''),
+    phone: String(teacherData.phone || ''),
+    spreadsheetUrl: String(teacherData.spreadsheetUrl || ''),
+    spreadsheetId: String(teacherData.spreadsheetId || '')
+  }
+}
+
+
