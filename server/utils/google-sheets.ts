@@ -132,7 +132,7 @@ export async function createSpreadsheetFromTemplate(params: {
         const newSheetData = await sheets.spreadsheets.get({
           spreadsheetId: newSpreadsheetId
         })
-        const defaultSheet = newSheetData.data.sheets?.find(s => s.properties?.title === 'Sheet1')
+        const defaultSheet = newSheetData.data.sheets?.find((s: any) => s.properties?.title === 'Sheet1')
         if (defaultSheet?.properties?.sheetId !== undefined) {
           await sheets.spreadsheets.batchUpdate({
             spreadsheetId: newSpreadsheetId,
