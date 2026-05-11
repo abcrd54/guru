@@ -1,32 +1,30 @@
-# Owner App
+# SiapGuru Owner
 
-Scaffold awal Next.js untuk `Flow Provisioning Admin Next.js`.
+Dashboard owner/admin untuk provisioning guru dan spreadsheet.
 
-Isi awal yang sudah tersedia:
+## Tech Stack
 
-- App Router + TypeScript
-- dashboard owner
-- halaman lisensi
-- halaman guru
-- halaman provisioning
-- placeholder WhatsApp dan pengaturan
-- pembacaan data nyata dari Firestore via Firebase Admin
+- Nuxt.js 3
+- Vue 3
+- TypeScript
+- Firebase Admin SDK
+- Google Sheets API
 
-Menjalankan project:
+## Setup
 
 ```bash
 npm install
 npm run dev
 ```
 
-Env awal bisa disalin dari:
+Buka [http://localhost:3000](http://localhost:3000)
 
-```bash
-.env.example
+## Environment Variables
+
+```env
+FIREBASE_PROJECT_ID=...
+FIREBASE_CLIENT_EMAIL=...
+FIREBASE_PRIVATE_KEY=...
+GOOGLE_TEMPLATE_SPREADSHEET_ID=...
+GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL=...
 ```
-
-Env minimum untuk data nyata:
-
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_CLIENT_EMAIL`
-- `FIREBASE_PRIVATE_KEY`

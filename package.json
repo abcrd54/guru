@@ -2,23 +2,25 @@
   "name": "siapguru-owner",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "firebase-admin": "^13.4.0",
     "googleapis": "^150.0.1",
-    "next": "^15.5.18",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "nuxt": "^3.15.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.18",
-    "@types/react": "^19.1.5",
-    "@types/react-dom": "^19.1.5",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vue-tsc": "^3.2.8"
   }
 }

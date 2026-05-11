@@ -1,4 +1,8 @@
 .next
+.nuxt
+.output
+.nitro
+.cache
 node_modules
 .env.local
 .env*.local
