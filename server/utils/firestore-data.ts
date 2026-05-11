@@ -1,4 +1,5 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { getAdminDb, hasFirebaseAdminEnv } from './firebase-admin'
 
 export type LicenseRecord = {
   id: string
