@@ -72,36 +72,132 @@ export async function createSpreadsheetFromTemplate(params: {
   console.log('🔵 [Google Sheets] Email:', params.email)
   
   try {
-    console.log('🔵 [Google Sheets] Getting Drive client...')
+    console.log('🔵 [Google Sheets] Getting Sheets and Drive clients...')
+    const sheets = getSheetsClient()
     const drive = getDriveClient()
-    console.log('✅ [Google Sheets] Drive client initialized')
+    console.log('✅ [Google Sheets] Clients initialized')
     
-    // Copy template spreadsheet
-    console.log('🔵 [Google Sheets] Copying template spreadsheet...')
-    const copyResponse = await drive.files.copy({
-      fileId: params.templateId,
-      requestBody: {
-        name: `${params.schoolName} - ${params.teacherName}`
+    // Try to copy template first
+    console.log('🔵 [Google Sheets] Attempting to copy template spreadsheet...')
+    let newSpreadsheetId: string
+    
+    try {
+      const copyResponse = await drive.files.copy({
+        fileId: params.templateId,
+        requestBody: {
+          name: `${params.schoolName} - ${params.teacherName}`
+        }
+      })
+      newSpreadsheetId = copyResponse.data.id!
+      console.log('✅ [Google Sheets] Template copied successfully!')
+      console.log('🔵 [Google Sheets] New Spreadsheet ID:', newSpreadsheetId)
+    } catch (copyError: any) {
+      console.warn('⚠️ [Google Sheets] Copy failed, creating new spreadsheet instead')
+      console.warn('⚠️ [Google Sheets] Copy error:', copyError.message)
+      
+      // Fallback: Create new spreadsheet and copy structure
+      console.log('🔵 [Google Sheets] Creating new spreadsheet...')
+      const createResponse = await sheets.spreadsheets.create({
+        requestBody: {
+          properties: {
+            title: `${params.schoolName} - ${params.teacherName}`
+          }
+        }
+      })
+      newSpreadsheetId = createResponse.data.spreadsheetId!
+      console.log('✅ [Google Sheets] New spreadsheet created!')
+      console.log('🔵 [Google Sheets] New Spreadsheet ID:', newSpreadsheetId)
+      
+      // Copy sheets from template
+      console.log('🔵 [Google Sheets] Copying sheets from template...')
+      try {
+        const templateData = await sheets.spreadsheets.get({
+          spreadsheetId: params.templateId
+        })
+        
+        for (const sheet of templateData.data.sheets || []) {
+          const sheetId = sheet.properties?.sheetId
+          if (sheetId !== undefined) {
+            await sheets.spreadsheets.sheets.copyTo({
+              spreadsheetId: params.templateId,
+              sheetId: sheetId,
+              requestBody: {
+                destinationSpreadsheetId: newSpreadsheetId
+              }
+            })
+          }
+        }
+        
+        // Delete default Sheet1
+        const newSheetData = await sheets.spreadsheets.get({
+          spreadsheetId: newSpreadsheetId
+        })
+        const defaultSheet = newSheetData.data.sheets?.find(s => s.properties?.title === 'Sheet1')
+        if (defaultSheet?.properties?.sheetId !== undefined) {
+          await sheets.spreadsheets.batchUpdate({
+            spreadsheetId: newSpreadsheetId,
+            requestBody: {
+              requests: [{
+                deleteSheet: {
+                  sheetId: defaultSheet.properties.sheetId
+                }
+              }]
+            }
+          })
+        }
+        
+        console.log('✅ [Google Sheets] Template structure copied!')
+      } catch (structureError: any) {
+        console.warn('⚠️ [Google Sheets] Could not copy template structure:', structureError.message)
+        console.warn('⚠️ [Google Sheets] Spreadsheet created with default structure')
       }
-    })
-
-    const newSpreadsheetId = copyResponse.data.id!
-    console.log('✅ [Google Sheets] Spreadsheet copied successfully!')
-    console.log('🔵 [Google Sheets] New Spreadsheet ID:', newSpreadsheetId)
+    }
     
-    // Share with teacher email
-    console.log('🔵 [Google Sheets] Sharing with teacher email...')
-    await drive.permissions.create({
-      fileId: newSpreadsheetId,
-      requestBody: {
-        type: 'user',
-        role: 'writer',
-        emailAddress: params.email
-      },
-      sendNotificationEmail: true,
-      emailMessage: `Spreadsheet SiapGuru Anda sudah siap! Silakan akses untuk mengelola nilai siswa.`
-    })
-    console.log('✅ [Google Sheets] Spreadsheet shared successfully!')
+    // Share with teacher email as owner (transfer ownership)
+    console.log('🔵 [Google Sheets] Transferring ownership to teacher...')
+    try {
+      // First, add teacher as writer
+      await drive.permissions.create({
+        fileId: newSpreadsheetId,
+        requestBody: {
+          type: 'user',
+          role: 'writer',
+          emailAddress: params.email
+        },
+        sendNotificationEmail: false
+      })
+      console.log('✅ [Google Sheets] Teacher added as writer')
+      
+      // Then transfer ownership
+      await drive.permissions.create({
+        fileId: newSpreadsheetId,
+        requestBody: {
+          type: 'user',
+          role: 'owner',
+          emailAddress: params.email
+        },
+        transferOwnership: true,
+        sendNotificationEmail: true,
+        emailMessage: `Spreadsheet SiapGuru Anda sudah siap! Silakan akses untuk mengelola nilai siswa.`
+      })
+      console.log('✅ [Google Sheets] Ownership transferred to teacher')
+    } catch (permError: any) {
+      console.warn('⚠️ [Google Sheets] Could not transfer ownership, keeping as shared file')
+      console.warn('⚠️ [Google Sheets] Permission error:', permError.message)
+      
+      // Fallback: just share with write access
+      await drive.permissions.create({
+        fileId: newSpreadsheetId,
+        requestBody: {
+          type: 'user',
+          role: 'writer',
+          emailAddress: params.email
+        },
+        sendNotificationEmail: true,
+        emailMessage: `Spreadsheet SiapGuru Anda sudah siap! Silakan akses untuk mengelola nilai siswa.`
+      })
+      console.log('✅ [Google Sheets] Spreadsheet shared with write access')
+    }
 
     const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${newSpreadsheetId}`
     console.log('✅ [Google Sheets] Spreadsheet URL:', spreadsheetUrl)
@@ -118,6 +214,22 @@ export async function createSpreadsheetFromTemplate(params: {
     if (error.response) {
       console.error('❌ [Google Sheets] API Response Status:', error.response.status)
       console.error('❌ [Google Sheets] API Response Data:', JSON.stringify(error.response.data, null, 2))
+    }
+    
+    // Check if it's a Drive API not enabled error
+    if (error.message && error.message.includes('Drive API has not been used')) {
+      throw new Error('Google Drive API belum diaktifkan. Silakan aktifkan di Google Cloud Console terlebih dahulu.')
+    }
+    
+    // Check if it's a file not found error
+    if (error.message && error.message.includes('File not found')) {
+      throw new Error(`Template spreadsheet tidak ditemukan (ID: ${params.templateId}). Pastikan: 1) Template ID benar, 2) Template di-share dengan Service Account: ${process.env.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL}`)
+    }
+    
+    // Check if it's a storage quota error
+    if (error.message && error.message.includes('storage quota')) {
+      console.log('⚠️ [Google Sheets] Storage quota error detected, will try alternative method on retry')
+      throw new Error('Storage quota Service Account terdeteksi penuh. Sistem akan mencoba metode alternatif. Silakan coba lagi.')
     }
     
     throw new Error(`Gagal membuat spreadsheet: ${error.message}`)
