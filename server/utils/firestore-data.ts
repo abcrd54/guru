@@ -210,3 +210,96 @@ export async function addProvisioningLog(params: {
     createdAt: FieldValue.serverTimestamp()
   })
 }
+
+export async function getLicenseByKey(licenseKey: string) {
+  if (!hasFirebaseAdminEnv()) {
+    throw new Error('Firebase Admin environment variables belum lengkap.')
+  }
+
+  const db = getAdminDb()
+  const doc = await db.collection('licenses').doc(licenseKey).get()
+  
+  if (!doc.exists) {
+    return null
+  }
+
+  const data = doc.data()!
+  return {
+    id: doc.id,
+    teacherName: String(data.teacherName || ''),
+    schoolName: String(data.schoolName || ''),
+    userEmail: String(data.userEmail || ''),
+    phone: String(data.phone || ''),
+    isActive: Boolean(data.isActive !== false),
+    spreadsheetUrl: String(data.spreadsheetUrl || ''),
+    createdAt: toIso(data.createdAt),
+    usedAt: data.usedAt ? toIso(data.usedAt) : null
+  }
+}
+
+export async function activateLicense(params: {
+  licenseKey: string
+  teacherName: string
+  schoolName: string
+  email: string
+  phone: string
+}) {
+  if (!hasFirebaseAdminEnv()) {
+    throw new Error('Firebase Admin environment variables belum lengkap.')
+  }
+
+  const db = getAdminDb()
+  const licenseRef = db.collection('licenses').doc(params.licenseKey)
+  const licenseDoc = await licenseRef.get()
+
+  if (!licenseDoc.exists) {
+    throw new Error('Lisensi tidak ditemukan')
+  }
+
+  const licenseData = licenseDoc.data()!
+  
+  if (licenseData.isActive === false) {
+    throw new Error('Lisensi sudah digunakan sebelumnya')
+  }
+
+  // Update license with teacher data
+  await licenseRef.update({
+    teacherName: params.teacherName,
+    schoolName: params.schoolName,
+    userEmail: params.email,
+    phone: params.phone,
+    isActive: false,
+    usedAt: FieldValue.serverTimestamp()
+  })
+
+  // Create teacher record
+  const teacherRef = await db.collection('teachers').add({
+    licenseKey: params.licenseKey,
+    teacherName: params.teacherName,
+    name: params.teacherName,
+    schoolName: params.schoolName,
+    email: params.email,
+    phone: params.phone,
+    spreadsheetId: '',
+    spreadsheetUrl: '',
+    createdAt: FieldValue.serverTimestamp()
+  })
+
+  // Log provisioning
+  await addProvisioningLog({
+    licenseKey: params.licenseKey,
+    teacherName: params.teacherName,
+    status: 'activated',
+    message: 'Lisensi berhasil diaktifkan'
+  })
+
+  // TODO: Create spreadsheet using Google Apps Script or Google Sheets API
+  // For now, return empty spreadsheet URL
+  // You can implement spreadsheet creation here or via webhook
+
+  return {
+    teacherId: teacherRef.id,
+    spreadsheetUrl: '' // Will be updated after spreadsheet creation
+  }
+}
+
