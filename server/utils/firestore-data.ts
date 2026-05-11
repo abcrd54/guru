@@ -293,13 +293,62 @@ export async function activateLicense(params: {
     message: 'Lisensi berhasil diaktifkan'
   })
 
-  // TODO: Create spreadsheet using Google Apps Script or Google Sheets API
-  // For now, return empty spreadsheet URL
-  // You can implement spreadsheet creation here or via webhook
+  // Create spreadsheet from template
+  let spreadsheetUrl = ''
+  let spreadsheetId = ''
+  
+  try {
+    const { hasGoogleCredentials, createSpreadsheetFromTemplate } = await import('./google-sheets')
+    
+    if (hasGoogleCredentials()) {
+      const templateId = process.env.GOOGLE_TEMPLATE_SPREADSHEET_ID!
+      
+      const result = await createSpreadsheetFromTemplate({
+        templateId,
+        teacherName: params.teacherName,
+        schoolName: params.schoolName,
+        email: params.email
+      })
+      
+      spreadsheetUrl = result.spreadsheetUrl
+      spreadsheetId = result.spreadsheetId
+      
+      // Update teacher record with spreadsheet info
+      await teacherRef.update({
+        spreadsheetId,
+        spreadsheetUrl,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+      
+      // Update license record with spreadsheet URL
+      await licenseRef.update({
+        spreadsheetUrl,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+      
+      // Log success
+      await addProvisioningLog({
+        licenseKey: params.licenseKey,
+        teacherName: params.teacherName,
+        status: 'spreadsheet_created',
+        message: 'Spreadsheet berhasil dibuat dan di-share'
+      })
+    }
+  } catch (error: any) {
+    console.error('Error creating spreadsheet:', error)
+    
+    // Log error but don't fail activation
+    await addProvisioningLog({
+      licenseKey: params.licenseKey,
+      teacherName: params.teacherName,
+      status: 'spreadsheet_error',
+      message: `Gagal membuat spreadsheet: ${error.message}`
+    })
+  }
 
   return {
     teacherId: teacherRef.id,
-    spreadsheetUrl: '' // Will be updated after spreadsheet creation
+    spreadsheetUrl
   }
 }
 
