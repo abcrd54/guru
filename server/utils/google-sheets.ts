@@ -71,6 +71,50 @@ export async function createSpreadsheetFromTemplate(params: {
   console.log('🔵 [Google Sheets] School:', params.schoolName)
   console.log('🔵 [Google Sheets] Email:', params.email)
   
+  // Check if Apps Script Web App URL is configured
+  const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_WEB_APP_URL
+  
+  if (appsScriptUrl) {
+    console.log('🔵 [Google Sheets] Using Apps Script Web App for provisioning...')
+    try {
+      const response = await fetch(appsScriptUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          templateId: params.templateId,
+          teacherName: params.teacherName,
+          schoolName: params.schoolName,
+          email: params.email
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        console.log('✅ [Google Sheets] Spreadsheet created via Apps Script')
+        console.log('🔵 [Google Sheets] Spreadsheet ID:', result.spreadsheetId)
+        console.log('🔵 [Google Sheets] Spreadsheet URL:', result.spreadsheetUrl)
+        
+        return {
+          spreadsheetId: result.spreadsheetId,
+          spreadsheetUrl: result.spreadsheetUrl
+        }
+      } else {
+        console.error('❌ [Google Sheets] Apps Script error:', result.error)
+        throw new Error(`Apps Script error: ${result.error}`)
+      }
+    } catch (appsScriptError: any) {
+      console.error('❌ [Google Sheets] Failed to call Apps Script:', appsScriptError.message)
+      console.log('⚠️ [Google Sheets] Falling back to Drive API...')
+      // Fall through to Drive API method below
+    }
+  } else {
+    console.log('⚠️ [Google Sheets] GOOGLE_APPS_SCRIPT_WEB_APP_URL not configured, using Drive API')
+  }
+  
+  // Original Drive API method (fallback)
   try {
     console.log('🔵 [Google Sheets] Getting Sheets and Drive clients...')
     const sheets = getSheetsClient()
@@ -92,65 +136,16 @@ export async function createSpreadsheetFromTemplate(params: {
       console.log('✅ [Google Sheets] Template copied successfully!')
       console.log('🔵 [Google Sheets] New Spreadsheet ID:', newSpreadsheetId)
     } catch (copyError: any) {
-      console.warn('⚠️ [Google Sheets] Copy failed, creating new spreadsheet instead')
-      console.warn('⚠️ [Google Sheets] Copy error:', copyError.message)
+      console.warn('⚠️ [Google Sheets] Copy failed:', copyError.message)
       
-      // Fallback: Create new spreadsheet and copy structure
-      console.log('🔵 [Google Sheets] Creating new spreadsheet...')
-      const createResponse = await sheets.spreadsheets.create({
-        requestBody: {
-          properties: {
-            title: `${params.schoolName} - ${params.teacherName}`
-          }
-        }
-      })
-      newSpreadsheetId = createResponse.data.spreadsheetId!
-      console.log('✅ [Google Sheets] New spreadsheet created!')
-      console.log('🔵 [Google Sheets] New Spreadsheet ID:', newSpreadsheetId)
-      
-      // Copy sheets from template
-      console.log('🔵 [Google Sheets] Copying sheets from template...')
-      try {
-        const templateData = await sheets.spreadsheets.get({
-          spreadsheetId: params.templateId
-        })
-        
-        for (const sheet of templateData.data.sheets || []) {
-          const sheetId = sheet.properties?.sheetId
-          if (sheetId !== undefined) {
-            await sheets.spreadsheets.sheets.copyTo({
-              spreadsheetId: params.templateId,
-              sheetId: sheetId,
-              requestBody: {
-                destinationSpreadsheetId: newSpreadsheetId
-              }
-            })
-          }
-        }
-        
-        // Delete default Sheet1
-        const newSheetData = await sheets.spreadsheets.get({
-          spreadsheetId: newSpreadsheetId
-        })
-        const defaultSheet = newSheetData.data.sheets?.find((s: any) => s.properties?.title === 'Sheet1')
-        if (defaultSheet?.properties?.sheetId !== undefined) {
-          await sheets.spreadsheets.batchUpdate({
-            spreadsheetId: newSpreadsheetId,
-            requestBody: {
-              requests: [{
-                deleteSheet: {
-                  sheetId: defaultSheet.properties.sheetId
-                }
-              }]
-            }
-          })
-        }
-        
-        console.log('✅ [Google Sheets] Template structure copied!')
-      } catch (structureError: any) {
-        console.warn('⚠️ [Google Sheets] Could not copy template structure:', structureError.message)
-        console.warn('⚠️ [Google Sheets] Spreadsheet created with default structure')
+      // If copy fails due to quota, we cannot create new spreadsheet either
+      // Service Account has no storage quota
+      if (copyError.message && copyError.message.includes('storage quota')) {
+        throw new Error('Service Account tidak memiliki storage quota. Silakan hubungi administrator untuk membersihkan Drive Service Account atau gunakan Service Account baru.')
       }
+      
+      // For other errors, throw immediately
+      throw new Error(`Gagal meng-copy template spreadsheet: ${copyError.message}`)
     }
     
     // Share with teacher email as owner (transfer ownership immediately)
